@@ -5,35 +5,21 @@
 #include <Adafruit_SSD1306.h>
 #include <max6675.h>
 #include <PID_v1.h>
+#include "PARAMETERS.h"
 
 // Function declarations
 void updateDisplay();
 void handleSerialCommands();
 
-// Display configuration
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-#define SCREEN_ADDRESS 0x3C
-
-// I2C Pins for ESP32
-#define I2C_SDA 12  // GPIO12 (D6)
-#define I2C_SCL 14  // GPIO14 (D5)
-
 // Initialize display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-// MAX6675 configuration - SPI pins (changed to avoid I2C overlap)
-#define thermoDO 19    // SO (Serial Out)
-#define thermoCS 5     // CS (Chip Select)
-#define thermoCLK 18   // SCK (Serial Clock)
 // Note: DI (Data In) pin is not used by MAX6675 as it's read-only
 
 MAX6675 thermocouple(thermoCLK, thermoCS, thermoDO);
 
 // PID Controller configuration
 double Setpoint, Input, Output;
-double Kp = 2.0, Ki = 5.0, Kd = 1.0;  // PID tuning parameters
+double Kp = DEFAULT_KP, Ki = DEFAULT_KI, Kd = DEFAULT_KD;  // PID tuning parameters
 PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 // SCR Control pin (PWM output)
@@ -41,17 +27,17 @@ PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 // Temperature variables
 double currentTemp = 0.0;
-double targetTemp = 25.0;  // Default setpoint in Celsius
+double targetTemp = DEFAULT_TARGET_TEMP;
 unsigned long lastTempRead = 0;
-const unsigned long TEMP_READ_INTERVAL = 250;  // Read temperature every 250ms
+const unsigned long TEMP_READ_INTERVAL = TEMP_READ_INTERVAL;  // Read temperature every TEMP_READ_INTERVAL ms
 
 // Display update timing
 unsigned long lastDisplayUpdate = 0;
-const unsigned long DISPLAY_UPDATE_INTERVAL = 500;  // Update display every 500ms
+const unsigned long DISPLAY_UPDATE_INTERVAL = DISPLAY_UPDATE_INTERVAL;  // Update display every DISPLAY_UPDATE_INTERVAL ms
 
 // Safety limits
-const double MAX_TEMP = 300.0;  // Maximum safe temperature
-const double MIN_TEMP = 0.0;    // Minimum temperature
+const double MAX_TEMP = MAX_TEMP;  // Maximum safe temperature
+const double MIN_TEMP = MIN_TEMP;    // Minimum temperature
 
 // System state
 bool heatingEnabled = true;
@@ -59,8 +45,8 @@ bool alarmState = false;
 
 void setup() {
   // Initialize serial communication
-  Serial.begin(115200);
-  delay(1000); // Give serial time to initialize
+  Serial.begin(SERIAL_BAUD_RATE);
+  delay(STARTUP_DELAY);
   Serial.println("\nESP32 Reflow Oven PID Controller Starting...");
   
   // Initialize I2C for display
@@ -87,7 +73,7 @@ void setup() {
   display.println("Display");
   display.println("Test");
   display.display();
-  delay(2000);
+  delay(DISPLAY_MESSAGE_DELAY);
   
   // Regular initialization message
   display.clearDisplay();
@@ -99,7 +85,7 @@ void setup() {
   
   // Initialize MAX6675
   Serial.println("Initializing MAX6675...");
-  delay(500);  // Wait for MAX6675 to stabilize
+  delay(SENSOR_INIT_DELAY);
   
   // Test temperature reading
   currentTemp = thermocouple.readCelsius();
@@ -115,7 +101,7 @@ void setup() {
     display.println("System will retry");
     display.println("automatically");
     display.display();
-    delay(3000);  // Show message for 3 seconds
+    delay(ERROR_MESSAGE_DELAY);
     alarmState = true;
   } else {
     Serial.print("Initial temperature: ");
@@ -128,7 +114,7 @@ void setup() {
   Setpoint = targetTemp;
   myPID.SetMode(AUTOMATIC);
   myPID.SetOutputLimits(0, 255);  // PWM output range (0-255)
-  myPID.SetSampleTime(250);       // PID calculation every 250ms
+  myPID.SetSampleTime(TEMP_READ_INTERVAL);
   
   // Initialize SCR control pin
   pinMode(SCR_CONTROL_PIN, OUTPUT);
