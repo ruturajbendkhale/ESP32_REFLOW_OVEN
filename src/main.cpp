@@ -34,6 +34,10 @@ unsigned long lastTempRead = 0;
 // Display update timing
 unsigned long lastDisplayUpdate = 0;
 
+// Cycle burst control variables
+unsigned long lastCycleBurst = 0;
+bool heaterState = false;
+
 // System state
 bool heatingEnabled = true;
 bool alarmState = false;
@@ -210,13 +214,45 @@ void loop() {
         Setpoint = reflowController.getTargetTemperature();
     }
     
-    // PID calculation and SCR control
+    // PID calculation and Cycle Burst SCR control
     if (heatingEnabled && !alarmState) {
         myPID.Compute();
-        analogWrite(SCR_CONTROL_PIN, (int)Output);
+        
+        // Calculate ON time based on PID output (0-255 mapped to 0-CYCLE_BURST_PERIOD)
+        unsigned long onTime = (Output * CYCLE_BURST_PERIOD) / 255;
+        
+        // Ensure minimum ON/OFF times
+        if (onTime < MIN_BURST_TIME) {
+            onTime = 0;
+        } else if (onTime > (CYCLE_BURST_PERIOD - MIN_BURST_TIME)) {
+            onTime = CYCLE_BURST_PERIOD;
+        }
+        
+        // Implement cycle burst control
+        unsigned long currentTime = millis();
+        unsigned long cycleTime = currentTime - lastCycleBurst;
+        
+        if (cycleTime >= CYCLE_BURST_PERIOD) {
+            lastCycleBurst = currentTime;
+            cycleTime = 0;
+        }
+        
+        // Set heater state based on cycle time
+        if (cycleTime < onTime) {
+            if (!heaterState) {
+                digitalWrite(SCR_CONTROL_PIN, HIGH);
+                heaterState = true;
+            }
+        } else {
+            if (heaterState) {
+                digitalWrite(SCR_CONTROL_PIN, LOW);
+                heaterState = false;
+            }
+        }
     } else {
         Output = 0;
-        analogWrite(SCR_CONTROL_PIN, 0);
+        digitalWrite(SCR_CONTROL_PIN, LOW);
+        heaterState = false;
     }
     
     // Update display

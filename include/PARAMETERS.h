@@ -42,4 +42,8 @@
 #define DISPLAY_MESSAGE_DELAY 2000 // Delay for displaying messages (ms)
 #define ERROR_MESSAGE_DELAY 3000   // Delay for error messages (ms)
 
+// Cycle Burst Control parameters
+#define CYCLE_BURST_PERIOD 1000    // Total period for one cycle burst (ms)
+#define MIN_BURST_TIME 100         // Minimum ON/OFF time to prevent too rapid switching (ms)
+
 #endif // PARAMETERS_H 
