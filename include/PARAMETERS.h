@@ -15,9 +15,8 @@
 #define thermoDO 19    // SO (Serial Out)
 #define thermoCS 5     // CS (Chip Select)
 #define thermoCLK 18   // SCK (Serial Clock)
-
 // SCR Control pin
-#define SCR_CONTROL_PIN 16  // PWM output pin
+#define SCR_CONTROL_PIN 16  // PWM output pin (D0)
 
 // Temperature configuration
 #define DEFAULT_TARGET_TEMP 25.0   // Default setpoint in Celsius

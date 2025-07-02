@@ -1,10 +1,13 @@
 #include <Arduino.h>
+
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <max6675.h>
 #include <PID_v1.h>
+
 #include "PARAMETERS.h"
 #include "PROFILE.h"
 #include "ReflowController.h"
@@ -57,10 +60,6 @@ void setup() {
     Serial.println("Initializing Display...");
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
         Serial.println(F("SSD1306 allocation failed! Check wiring:"));
-        Serial.println(F("- SDA connected to GPIO 12 (D6)"));
-        Serial.println(F("- SCL connected to GPIO 14 (D5)"));
-        Serial.println(F("- Display VCC to 3.3V"));
-        Serial.println(F("- Display GND to GND"));
         for(;;);
     }
     
