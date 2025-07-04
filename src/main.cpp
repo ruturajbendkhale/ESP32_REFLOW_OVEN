@@ -8,7 +8,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WebSocketsServer.h>
-#include <FS.h>
+#include <LittleFS.h>
 #include <ArduinoJson.h>
 
 #include "PARAMETERS.h"
@@ -64,10 +64,23 @@ void setup() {
     delay(STARTUP_DELAY);
     Serial.println("\nESP8266 Reflow Oven PID Controller Starting...");
     
-    // Initialize SPIFFS
-    if(!SPIFFS.begin()) {
-        Serial.println("SPIFFS initialization failed!");
+    // Initialize LittleFS
+    if(!LittleFS.begin()) {
+        Serial.println("LittleFS initialization failed!");
+        Serial.println("Please upload the file system image (PlatformIO: Upload Filesystem Image)");
         return;
+    }
+    Serial.println("File system initialized successfully!");
+    
+    // Debug: List files in file system
+    Dir dir = LittleFS.openDir("/");
+    Serial.println("Files in file system:");
+    while (dir.next()) {
+        Serial.print("  - ");
+        Serial.print(dir.fileName());
+        Serial.print(" (");
+        Serial.print(dir.fileSize());
+        Serial.println(" bytes)");
     }
     
     // Connect to WiFi
@@ -78,14 +91,46 @@ void setup() {
         Serial.print(".");
     }
     Serial.println();
-    Serial.print("Connected! IP address: ");
+    Serial.println("========================================");
+    Serial.println("          Network Information           ");
+    Serial.println("========================================");
+    Serial.print("Connected to WiFi: ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
+    Serial.println("To access the interface:");
+    Serial.print("1. Main dashboard: http://");
+    Serial.println(WiFi.localIP());
+    Serial.print("2. WebSocket URL: ws://");
+    Serial.print(WiFi.localIP());
+    Serial.println(":81");
+    Serial.println("========================================");
     
     // Initialize web server
     server.on("/", HTTP_GET, []() {
-        File file = SPIFFS.open("/index.html", "r");
-        server.streamFile(file, "text/html");
-        file.close();
+        Serial.println("Web request received for /");
+        if (LittleFS.exists("/index.html")) {
+            Serial.println("Found index.html, serving...");
+            File file = LittleFS.open("/index.html", "r");
+            if (file) {
+                Serial.printf("File size: %d bytes\n", file.size());
+                server.streamFile(file, "text/html");
+                file.close();
+                Serial.println("File served successfully");
+            } else {
+                Serial.println("Error opening index.html!");
+                server.send(500, "text/plain", "Internal Server Error");
+            }
+        } else {
+            Serial.println("Error: index.html not found in file system!");
+            // List all files to help debug
+            Dir dir = LittleFS.openDir("/");
+            Serial.println("Available files:");
+            while (dir.next()) {
+                Serial.printf("  - %s (%d bytes)\n", dir.fileName().c_str(), dir.fileSize());
+            }
+            server.send(404, "text/plain", "File not found");
+        }
     });
     server.begin();
     
@@ -149,23 +194,6 @@ void sendWebSocketData() {
     doc["state"] = ReflowController::getStageString(reflowController.getCurrentStage());
     doc["isRunning"] = reflowController.isRunning();
     doc["heaterOn"] = heaterState;
-    
-    // Profile parameters
-    JsonObject profile = doc.createNestedObject("profile");
-    profile["preheat"]["target"] = SOAK_TARGET_TEMP;
-    profile["preheat"]["rampRate"] = PREHEAT_RAMP_RATE;
-    profile["preheat"]["maxTime"] = MAX_PREHEAT_TIME;
-    
-    profile["soak"]["temp"] = SOAK_TEMP;
-    profile["soak"]["duration"] = SOAK_DURATION;
-    
-    profile["reflow"]["rampRate"] = REFLOW_RAMP_RATE;
-    profile["reflow"]["peakTemp"] = PEAK_TEMP;
-    profile["reflow"]["liquidusTemp"] = LIQUIDUS_TEMP;
-    profile["reflow"]["timeAboveLiquidus"] = TIME_ABOVE_LIQUIDUS;
-    
-    profile["cooling"]["rate"] = COOLING_RATE;
-    profile["cooling"]["safeTemp"] = SAFE_HANDLING_TEMP;
     
     String jsonString;
     serializeJson(doc, jsonString);
