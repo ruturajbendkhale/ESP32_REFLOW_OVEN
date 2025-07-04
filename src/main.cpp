@@ -1,20 +1,33 @@
 #include <Arduino.h>
-
-
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <max6675.h>
 #include <PID_v1.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <WebSocketsServer.h>
+#include <FS.h>
+#include <ArduinoJson.h>
 
 #include "PARAMETERS.h"
 #include "PROFILE.h"
 #include "ReflowController.h"
 
+// WiFi credentials
+const char* ssid = "ross-srv";     // Replace with your WiFi SSID
+const char* password = "98989898";  // Replace with your WiFi password
+
+// Web server and WebSocket
+ESP8266WebServer server(80);
+WebSocketsServer webSocket(81);
+
 // Function declarations
 void updateDisplay();
 void handleSerialCommands();
+void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
+void sendWebSocketData();
 
 // Initialize display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -45,13 +58,40 @@ bool heaterState = false;
 bool heatingEnabled = true;
 bool alarmState = false;
 
-
-
 void setup() {
     // Initialize serial communication
     Serial.begin(SERIAL_BAUD_RATE);
     delay(STARTUP_DELAY);
-    Serial.println("\nESP32 Reflow Oven PID Controller Starting...");
+    Serial.println("\nESP8266 Reflow Oven PID Controller Starting...");
+    
+    // Initialize SPIFFS
+    if(!SPIFFS.begin()) {
+        Serial.println("SPIFFS initialization failed!");
+        return;
+    }
+    
+    // Connect to WiFi
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+    Serial.print("Connected! IP address: ");
+    Serial.println(WiFi.localIP());
+    
+    // Initialize web server
+    server.on("/", HTTP_GET, []() {
+        File file = SPIFFS.open("/index.html", "r");
+        server.streamFile(file, "text/html");
+        file.close();
+    });
+    server.begin();
+    
+    // Initialize WebSocket
+    webSocket.begin();
+    webSocket.onEvent(handleWebSocket);
     
     // Initialize I2C for display
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -77,11 +117,59 @@ void setup() {
     analogWrite(SCR_CONTROL_PIN, 0);
     
     Serial.println("System initialized successfully!");
-    Serial.println("Commands:");
-    Serial.println("  start - Start reflow process");
-    Serial.println("  stop - Stop reflow process");
-    Serial.println("  status - Show current status");
-    Serial.println("  h - Toggle heating on/off");
+}
+
+void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] Disconnected!\n", num);
+            break;
+        case WStype_CONNECTED:
+            Serial.printf("[%u] Connected from url: %s\n", num, payload);
+            break;
+        case WStype_TEXT:
+            String command = String((char*)payload);
+            if(command == "start") {
+                heatingEnabled = true;
+                reflowController.start();
+            } else if(command == "stop") {
+                heatingEnabled = false;
+                reflowController.stop();
+            }
+            break;
+    }
+}
+
+void sendWebSocketData() {
+    StaticJsonDocument<512> doc;  // Increased size for profile data
+    
+    // Current status
+    doc["temp"] = currentTemp;
+    doc["setpoint"] = reflowController.getTargetTemperature();
+    doc["state"] = ReflowController::getStageString(reflowController.getCurrentStage());
+    doc["isRunning"] = reflowController.isRunning();
+    doc["heaterOn"] = heaterState;
+    
+    // Profile parameters
+    JsonObject profile = doc.createNestedObject("profile");
+    profile["preheat"]["target"] = SOAK_TARGET_TEMP;
+    profile["preheat"]["rampRate"] = PREHEAT_RAMP_RATE;
+    profile["preheat"]["maxTime"] = MAX_PREHEAT_TIME;
+    
+    profile["soak"]["temp"] = SOAK_TEMP;
+    profile["soak"]["duration"] = SOAK_DURATION;
+    
+    profile["reflow"]["rampRate"] = REFLOW_RAMP_RATE;
+    profile["reflow"]["peakTemp"] = PEAK_TEMP;
+    profile["reflow"]["liquidusTemp"] = LIQUIDUS_TEMP;
+    profile["reflow"]["timeAboveLiquidus"] = TIME_ABOVE_LIQUIDUS;
+    
+    profile["cooling"]["rate"] = COOLING_RATE;
+    profile["cooling"]["safeTemp"] = SAFE_HANDLING_TEMP;
+    
+    String jsonString;
+    serializeJson(doc, jsonString);
+    webSocket.broadcastTXT(jsonString);
 }
 
 void updateDisplay() {
@@ -192,6 +280,10 @@ void handleSerialCommands() {
 }
 
 void loop() {
+    // Handle web server
+    server.handleClient();
+    webSocket.loop();
+    
     // Read temperature with error recovery
     if (millis() - lastTempRead >= TEMP_READ_INTERVAL) {
         double tempReading = thermocouple.readCelsius();
@@ -270,9 +362,10 @@ void loop() {
         heaterState = false;
     }
     
-    // Update display
+    // Update display and WebSocket
     if (millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         updateDisplay();
+        sendWebSocketData();
         lastDisplayUpdate = millis();
     }
     
