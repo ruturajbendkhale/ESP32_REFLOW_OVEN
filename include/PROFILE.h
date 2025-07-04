@@ -4,6 +4,7 @@
 // Preheat Stage Parameters
 #define PREHEAT_RAMP_RATE 2.0        // °C/s - Rate of temperature increase from ambient
 #define SOAK_TARGET_TEMP 150.0       // °C - Temperature at which soak begins
+#define MAX_PREHEAT_TIME 120         // seconds - Maximum time allowed in preheat phase
 
 // Soak Stage Parameters
 #define SOAK_TEMP 165.0              // °C - Stable temperature for soak
