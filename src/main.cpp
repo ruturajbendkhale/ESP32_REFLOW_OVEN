@@ -173,11 +173,15 @@ void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t lengt
             Serial.printf("[%u] Connected from url: %s\n", num, payload);
             break;
         case WStype_TEXT:
-            String command = String((char*)payload);
-            if(command == "start") {
+            const size_t bufferSize = 32;  // Adjust size as needed for expected payloads
+            char command[bufferSize];
+            strncpy(command, (char*)payload, bufferSize - 1);
+            command[bufferSize - 1] = '\0';  // Ensure null termination
+            
+            if (strncmp(command, "start", bufferSize) == 0) {
                 heatingEnabled = true;
                 reflowController.start();
-            } else if(command == "stop") {
+            } else if (strncmp(command, "stop", bufferSize) == 0) {
                 heatingEnabled = false;
                 reflowController.stop();
             }
