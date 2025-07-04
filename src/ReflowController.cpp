@@ -38,9 +38,12 @@ double ReflowController::calculateTargetTemperature() {
     double elapsedTimeInStage = (millis() - reflowStatus.stageStartTime) / 1000.0; // Convert to seconds
     
     switch(reflowStatus.currentStage) {
-        case STAGE_PREHEAT:
-            // Linear ramp from ambient to soak temperature
-            return AMBIENT_TEMP + (PREHEAT_RAMP_RATE * elapsedTimeInStage);
+        case STAGE_PREHEAT: {
+            // Linear ramp from ambient to soak temperature with limit
+            double targetTemp = AMBIENT_TEMP + (PREHEAT_RAMP_RATE * elapsedTimeInStage);
+            // Don't exceed soak target temperature
+            return min(targetTemp, SOAK_TARGET_TEMP);
+        }
             
         case STAGE_SOAK:
             // Maintain constant soak temperature
@@ -50,9 +53,16 @@ double ReflowController::calculateTargetTemperature() {
             // Linear ramp from soak to peak temperature
             return SOAK_TEMP + (REFLOW_RAMP_RATE * elapsedTimeInStage);
             
-        case STAGE_COOLING:
-            // Linear cooling from peak temperature
-            return PEAK_TEMP - (COOLING_RATE * elapsedTimeInStage);
+        case STAGE_COOLING: {
+            // Linear cooling from peak temperature with minimum limit
+            double targetTemp = PEAK_TEMP - (COOLING_RATE * elapsedTimeInStage);
+            // Don't go below ambient or safe handling temperature (whichever is higher)
+            return max(max(targetTemp, AMBIENT_TEMP), SAFE_HANDLING_TEMP);
+        }
+            
+        case STAGE_COMPLETE:
+            // When complete, maintain safe handling temperature
+            return SAFE_HANDLING_TEMP;
             
         default:
             return AMBIENT_TEMP;
@@ -71,10 +81,15 @@ void ReflowController::updateStage(double currentTemp) {
             break;
             
         case STAGE_PREHEAT:
-            if (currentTemp >= SOAK_TARGET_TEMP) {
+            // Check both temperature and time conditions
+            if (currentTemp >= SOAK_TARGET_TEMP || elapsedTimeInStage >= MAX_PREHEAT_TIME) {
                 reflowStatus.currentStage = STAGE_SOAK;
                 reflowStatus.stageStartTime = currentTime;
-                Serial.println("Entering Soak Stage");
+                if (elapsedTimeInStage >= MAX_PREHEAT_TIME) {
+                    Serial.println("Preheat time limit reached, entering Soak Stage");
+                } else {
+                    Serial.println("Target temperature reached, entering Soak Stage");
+                }
             }
             break;
             
@@ -99,12 +114,13 @@ void ReflowController::updateStage(double currentTemp) {
                 reflowStatus.currentStage = STAGE_COMPLETE;
                 reflowStatus.isComplete = true;
                 reflowInProgress = false;
+                reflowStatus.targetTemp = SAFE_HANDLING_TEMP;  // Set final target temperature
                 Serial.println("Reflow Process Complete");
             }
             break;
             
         case STAGE_COMPLETE:
-            // Do nothing, wait for manual reset
+            // Process is complete, do nothing until manual reset
             break;
     }
     

@@ -5,13 +5,29 @@
 #include <Adafruit_SSD1306.h>
 #include <max6675.h>
 #include <PID_v1.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <WebSocketsServer.h>
+#include <LittleFS.h>
+#include <ArduinoJson.h>
+
 #include "PARAMETERS.h"
 #include "PROFILE.h"
 #include "ReflowController.h"
 
+// WiFi credentials
+const char* ssid = "ross-srv";     // Replace with your WiFi SSID
+const char* password = "98989898";  // Replace with your WiFi password
+
+// Web server and WebSocket
+ESP8266WebServer server(80);
+WebSocketsServer webSocket(81);
+
 // Function declarations
 void updateDisplay();
 void handleSerialCommands();
+void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
+void sendWebSocketData();
 
 // Initialize display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -34,17 +50,93 @@ unsigned long lastTempRead = 0;
 // Display update timing
 unsigned long lastDisplayUpdate = 0;
 
+// Cycle burst control variables
+unsigned long lastCycleBurst = 0;
+bool heaterState = false;
+
 // System state
 bool heatingEnabled = true;
 bool alarmState = false;
-
-
 
 void setup() {
     // Initialize serial communication
     Serial.begin(SERIAL_BAUD_RATE);
     delay(STARTUP_DELAY);
-    Serial.println("\nESP32 Reflow Oven PID Controller Starting...");
+    Serial.println("\nESP8266 Reflow Oven PID Controller Starting...");
+    
+    // Initialize LittleFS
+    if(!LittleFS.begin()) {
+        Serial.println("LittleFS initialization failed!");
+        Serial.println("Please upload the file system image (PlatformIO: Upload Filesystem Image)");
+        return;
+    }
+    Serial.println("File system initialized successfully!");
+    
+    // Debug: List files in file system
+    Dir dir = LittleFS.openDir("/");
+    Serial.println("Files in file system:");
+    while (dir.next()) {
+        Serial.print("  - ");
+        Serial.print(dir.fileName());
+        Serial.print(" (");
+        Serial.print(dir.fileSize());
+        Serial.println(" bytes)");
+    }
+    
+    // Connect to WiFi
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+    Serial.println("========================================");
+    Serial.println("          Network Information           ");
+    Serial.println("========================================");
+    Serial.print("Connected to WiFi: ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.println("To access the interface:");
+    Serial.print("1. Main dashboard: http://");
+    Serial.println(WiFi.localIP());
+    Serial.print("2. WebSocket URL: ws://");
+    Serial.print(WiFi.localIP());
+    Serial.println(":81");
+    Serial.println("========================================");
+    
+    // Initialize web server
+    server.on("/", HTTP_GET, []() {
+        Serial.println("Web request received for /");
+        if (LittleFS.exists("/index.html")) {
+            Serial.println("Found index.html, serving...");
+            File file = LittleFS.open("/index.html", "r");
+            if (file) {
+                Serial.printf("File size: %d bytes\n", file.size());
+                server.streamFile(file, "text/html");
+                file.close();
+                Serial.println("File served successfully");
+            } else {
+                Serial.println("Error opening index.html!");
+                server.send(500, "text/plain", "Internal Server Error");
+            }
+        } else {
+            Serial.println("Error: index.html not found in file system!");
+            // List all files to help debug
+            Dir dir = LittleFS.openDir("/");
+            Serial.println("Available files:");
+            while (dir.next()) {
+                Serial.printf("  - %s (%d bytes)\n", dir.fileName().c_str(), dir.fileSize());
+            }
+            server.send(404, "text/plain", "File not found");
+        }
+    });
+    server.begin();
+    
+    // Initialize WebSocket
+    webSocket.begin();
+    webSocket.onEvent(handleWebSocket);
     
     // Initialize I2C for display
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -53,10 +145,6 @@ void setup() {
     Serial.println("Initializing Display...");
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
         Serial.println(F("SSD1306 allocation failed! Check wiring:"));
-        Serial.println(F("- SDA connected to GPIO 12 (D6)"));
-        Serial.println(F("- SCL connected to GPIO 14 (D5)"));
-        Serial.println(F("- Display VCC to 3.3V"));
-        Serial.println(F("- Display GND to GND"));
         for(;;);
     }
     
@@ -74,11 +162,46 @@ void setup() {
     analogWrite(SCR_CONTROL_PIN, 0);
     
     Serial.println("System initialized successfully!");
-    Serial.println("Commands:");
-    Serial.println("  start - Start reflow process");
-    Serial.println("  stop - Stop reflow process");
-    Serial.println("  status - Show current status");
-    Serial.println("  h - Toggle heating on/off");
+}
+
+void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] Disconnected!\n", num);
+            break;
+        case WStype_CONNECTED:
+            Serial.printf("[%u] Connected from url: %s\n", num, payload);
+            break;
+        case WStype_TEXT:
+            const size_t bufferSize = 32;  // Adjust size as needed for expected payloads
+            char command[bufferSize];
+            strncpy(command, (char*)payload, bufferSize - 1);
+            command[bufferSize - 1] = '\0';  // Ensure null termination
+            
+            if (strncmp(command, "start", bufferSize) == 0) {
+                heatingEnabled = true;
+                reflowController.start();
+            } else if (strncmp(command, "stop", bufferSize) == 0) {
+                heatingEnabled = false;
+                reflowController.stop();
+            }
+            break;
+    }
+}
+
+void sendWebSocketData() {
+    StaticJsonDocument<512> doc;  // Increased size for profile data
+    
+    // Current status
+    doc["temp"] = currentTemp;
+    doc["setpoint"] = reflowController.getTargetTemperature();
+    doc["state"] = ReflowController::getStageString(reflowController.getCurrentStage());
+    doc["isRunning"] = reflowController.isRunning();
+    doc["heaterOn"] = heaterState;
+    
+    String jsonString;
+    serializeJson(doc, jsonString);
+    webSocket.broadcastTXT(jsonString);
 }
 
 void updateDisplay() {
@@ -127,6 +250,22 @@ void updateDisplay() {
     }
     
     display.display();
+
+    // Send real-time data over Serial with current state
+    Serial.print("State:");
+    Serial.print(ReflowController::getStageString(reflowController.getCurrentStage()));
+    Serial.print(",T:");
+    Serial.print(currentTemp, 1);
+    Serial.print(",S:");
+    Serial.print(reflowController.getTargetTemperature(), 1);
+    Serial.print(",P:");
+    Serial.print((Output/255.0)*100, 1);
+    if (alarmState) {
+        Serial.print(",ALARM");
+    } else if (!heatingEnabled) {
+        Serial.print(",DISABLED");
+    }
+    Serial.println();
 }
 
 void handleSerialCommands() {
@@ -173,6 +312,10 @@ void handleSerialCommands() {
 }
 
 void loop() {
+    // Handle web server
+    server.handleClient();
+    webSocket.loop();
+    
     // Read temperature with error recovery
     if (millis() - lastTempRead >= TEMP_READ_INTERVAL) {
         double tempReading = thermocouple.readCelsius();
@@ -210,18 +353,51 @@ void loop() {
         Setpoint = reflowController.getTargetTemperature();
     }
     
-    // PID calculation and SCR control
+    // PID calculation and Cycle Burst SCR control
     if (heatingEnabled && !alarmState) {
         myPID.Compute();
-        analogWrite(SCR_CONTROL_PIN, (int)Output);
+        
+        // Calculate ON time based on PID output (0-255 mapped to 0-CYCLE_BURST_PERIOD)
+        unsigned long onTime = (Output * CYCLE_BURST_PERIOD) / 255;
+        
+        // Ensure minimum ON/OFF times
+        if (onTime < MIN_BURST_TIME) {
+            onTime = 0;
+        } else if (onTime > (CYCLE_BURST_PERIOD - MIN_BURST_TIME)) {
+            onTime = CYCLE_BURST_PERIOD;
+        }
+        
+        // Implement cycle burst control
+        unsigned long currentTime = millis();
+        unsigned long cycleTime = currentTime - lastCycleBurst;
+        
+        if (cycleTime >= CYCLE_BURST_PERIOD) {
+            lastCycleBurst = currentTime;
+            cycleTime = 0;
+        }
+        
+        // Set heater state based on cycle time
+        if (cycleTime < onTime) {
+            if (!heaterState) {
+                digitalWrite(SCR_CONTROL_PIN, HIGH);
+                heaterState = true;
+            }
+        } else {
+            if (heaterState) {
+                digitalWrite(SCR_CONTROL_PIN, LOW);
+                heaterState = false;
+            }
+        }
     } else {
         Output = 0;
-        analogWrite(SCR_CONTROL_PIN, 0);
+        digitalWrite(SCR_CONTROL_PIN, LOW);
+        heaterState = false;
     }
     
-    // Update display
+    // Update display and WebSocket
     if (millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         updateDisplay();
+        sendWebSocketData();
         lastDisplayUpdate = millis();
     }
     

@@ -7,17 +7,16 @@
 #define OLED_RESET -1
 #define SCREEN_ADDRESS 0x3C
 
-// I2C Pins for ESP32
-#define I2C_SDA 12  // GPIO12 (D6)
-#define I2C_SCL 14  // GPIO14 (D5)
+// I2C Pins for NodeMCU ESP8266
+#define I2C_SDA D2  // GPIO4 (D2)
+#define I2C_SCL D1  // GPIO5 (D1)
 
 // MAX6675 configuration - SPI pins
-#define thermoDO 19    // SO (Serial Out)
-#define thermoCS 5     // CS (Chip Select)
-#define thermoCLK 18   // SCK (Serial Clock)
-
+#define thermoDO D7    // SO (Serial Out) - GPIO13 (D7)
+#define thermoCS D8    // CS (Chip Select) - GPIO15 (D8)
+#define thermoCLK D5   // SCK (Serial Clock) - GPIO14 (D5)
 // SCR Control pin
-#define SCR_CONTROL_PIN 16  // PWM output pin
+#define SCR_CONTROL_PIN D6  // PWM output pin - GPIO12 (D6)
 
 // Temperature configuration
 #define DEFAULT_TARGET_TEMP 25.0   // Default setpoint in Celsius
@@ -41,5 +40,9 @@
 #define SENSOR_INIT_DELAY 500     // Delay for MAX6675 to stabilize (ms)
 #define DISPLAY_MESSAGE_DELAY 2000 // Delay for displaying messages (ms)
 #define ERROR_MESSAGE_DELAY 3000   // Delay for error messages (ms)
+
+// Cycle Burst Control parameters
+#define CYCLE_BURST_PERIOD 500    // Total period for one cycle burst (ms)
+#define MIN_BURST_TIME 100         // Minimum ON/OFF time to prevent too rapid switching (ms)
 
 #endif // PARAMETERS_H 

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reflow Oven Controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 20px;
+        }
+        .dashboard {
+            flex: 7;  /* 70% */
+            min-width: 0; /* Prevent flex item from overflowing */
+        }
+        .parameters {
+            flex: 3;  /* 30% */
+            border-left: 1px solid #e0e0e0;
+            padding-left: 20px;
+            min-width: 300px; /* Minimum width for readability */
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+        button:active::after {
+            animation: ripple 0.6s ease-out;
+        }
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 0.5;
+            }
+            100% {
+                transform: scale(40, 40);
+                opacity: 0;
+            }
+        }
+        @keyframes activeButtonPulse {
+            0% {
+                box-shadow: 0 0 5px rgba(255, 255, 255, 0.5),
+                           inset 0 2px 5px rgba(0,0,0,0.3);
+            }
+            50% {
+                box-shadow: 0 0 15px rgba(255, 255, 255, 0.8),
+                           inset 0 2px 5px rgba(0,0,0,0.3);
+            }
+            100% {
+                box-shadow: 0 0 5px rgba(255, 255, 255, 0.5),
+                           inset 0 2px 5px rgba(0,0,0,0.3);
+            }
+        }
+        #startBtn {
+            background-color: #4CAF50;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(76, 175, 80, 0.3);
+        }
+        #startBtn:hover {
+            background-color: #45a049;
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
+        }
+        #startBtn.active {
+            background-color: #357a38;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.3);
+            transform: translateY(2px);
+            animation: activeButtonPulse 2s infinite;
+            border: 2px solid #4CAF50;
+        }
+        #stopBtn {
+            background-color: #f44336;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(244, 67, 54, 0.3);
+        }
+        #stopBtn:hover {
+            background-color: #da190b;
+            box-shadow: 0 4px 8px rgba(244, 67, 54, 0.4);
+        }
+        #stopBtn.active {
+            background-color: #ba000d;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.3);
+            transform: translateY(2px);
+            animation: activeButtonPulse 2s infinite;
+            border: 2px solid #f44336;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .status-item {
+            margin: 10px 0;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #currentTemp, #setTemp {
+            font-weight: bold;
+            color: #2196F3;
+        }
+        #currentState {
+            font-weight: bold;
+            color: #FF9800;
+        }
+        .heater-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #ccc;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        .heater-indicator.on {
+            background-color: #ff5722;
+            box-shadow: 0 0 10px #ff5722;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .profile-details {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .profile-stage {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .profile-stage.active {
+            border-left: 4px solid #4CAF50;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="dashboard">
+            <h1><center>Reflow Oven Controller</center></h1>
+            
+            <div class="controls">
+                <button id="startBtn" onclick="startProcess()">Start</button>
+                <button id="stopBtn" onclick="stopProcess()">Stop</button>
+            </div>
+
+            <canvas id="tempChart"></canvas>
+
+            <div class="status">
+                <div class="status-item">Current Temperature: <span id="currentTemp">--</span>°C</div>
+                <div class="status-item">Set Temperature: <span id="setTemp">--</span>°C</div>
+                <div class="status-item">Current State: <span id="currentState">--</span></div>
+                <div class="status-item">Heater Status: <div class="heater-indicator"></div></div>
+            </div>
+        </div>
+
+        <div class="parameters">
+            <div class="profile-details">
+                <h2>Reflow Profile Stages</h2>
+                <div class="profile-stage" data-stage="PREHEAT">
+                    <h3>Preheat</h3>
+                    <p>Target: 150°C</p>
+                    <p>Max Time: 90s</p>
+                </div>
+                <div class="profile-stage" data-stage="SOAK">
+                    <h3>Soak</h3>
+                    <p>Target: 180°C</p>
+                    <p>Duration: 60-120s</p>
+                </div>
+                <div class="profile-stage" data-stage="REFLOW">
+                    <h3>Reflow</h3>
+                    <p>Target: 230°C</p>
+                    <p>Duration: 30-60s</p>
+                </div>
+                <div class="profile-stage" data-stage="COOLING">
+                    <h3>Cooling</h3>
+                    <p>Target: Below 50°C</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let chart;
+        let isProcessRunning = false;
+        let startTime = null;
+
+        // Initialize the chart
+        const ctx = document.getElementById('tempChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Measured Temperature',
+                    borderColor: 'rgb(255, 99, 132)',
+                    data: [],
+                    fill: false
+                }, {
+                    label: 'Set Temperature',
+                    borderColor: 'rgb(54, 162, 235)',
+                    data: [],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        min: 0,
+                        max: 480,
+                        title: {
+                            display: true,
+                            text: 'Time (seconds)',
+                            font: {
+                                weight: 'bold',
+                                size: 16 // Increased font size for x-axis title
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 14 // Increased font size for x-axis ticks
+                            }
+                        }
+                    },
+                    y: {
+                        min: 0,
+                        max: 400,
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C)',
+                            font: {
+                                weight: 'bold',
+                                size: 16 // Increased font size for y-axis title
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 14 // Increased font size for y-axis ticks
+                            }
+                        }
+                    }
+                },
+                animation: false
+            }
+        });
+
+        function connectWebSocket() {
+            ws = new WebSocket('ws://' + window.location.hostname + ':81/');
+            
+            ws.onopen = function() {
+                console.log('Connected to WebSocket');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                updateDisplay(data);
+            };
+            
+            ws.onclose = function() {
+                console.log('WebSocket connection closed');
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        function updateDisplay(data) {
+            document.getElementById('currentTemp').textContent = data.temp.toFixed(1);
+            document.getElementById('setTemp').textContent = data.setpoint.toFixed(1);
+            document.getElementById('currentState').textContent = data.state;
+
+            // Update heater indicator
+            const heaterIndicator = document.querySelector('.heater-indicator');
+            if (data.heaterOn) {
+                heaterIndicator.classList.add('on');
+            } else {
+                heaterIndicator.classList.remove('on');
+            }
+
+            // Update button states with latching behavior
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            if (data.isRunning) {
+                startBtn.classList.add('active');
+                stopBtn.classList.remove('active');
+                startBtn.style.pointerEvents = 'none'; // Disable start button while running
+                stopBtn.style.pointerEvents = 'auto';  // Enable stop button
+            } else {
+                startBtn.classList.remove('active');
+                stopBtn.classList.add('active');
+                startBtn.style.pointerEvents = 'auto';  // Enable start button
+                stopBtn.style.pointerEvents = 'none';   // Disable stop button while stopped
+            }
+
+            // Update profile stages
+            document.querySelectorAll('.profile-stage').forEach(stage => {
+                stage.classList.remove('active');
+                if (stage.dataset.stage === data.state) {
+                    stage.classList.add('active');
+                }
+            });
+
+            if (data.isRunning && !isProcessRunning) {
+                startTime = Date.now();
+                isProcessRunning = true;
+                chart.data.labels = [];
+                chart.data.datasets[0].data = [];
+                chart.data.datasets[1].data = [];
+            } else if (!data.isRunning) {
+                isProcessRunning = false;
+            }
+
+            if (isProcessRunning) {
+                const elapsedTime = (Date.now() - startTime) / 1000;
+                
+                chart.data.datasets[0].data.push({
+                    x: elapsedTime,
+                    y: data.temp
+                });
+                chart.data.datasets[1].data.push({
+                    x: elapsedTime,
+                    y: data.setpoint
+                });
+
+                // Remove old data points that are outside the visible range
+                chart.data.datasets.forEach(dataset => {
+                    dataset.data = dataset.data.filter(point => point.x > elapsedTime - 480);
+                });
+
+                chart.update();
+            }
+        }
+
+        function startProcess() {
+            ws.send('start');
+            // Add click animation class
+            const btn = document.getElementById('startBtn');
+            btn.classList.add('clicked');
+            setTimeout(() => btn.classList.remove('clicked'), 300);
+        }
+
+        function stopProcess() {
+            ws.send('stop');
+            // Add click animation class
+            const btn = document.getElementById('stopBtn');
+            btn.classList.add('clicked');
+            setTimeout(() => btn.classList.remove('clicked'), 300);
+        }
+
+        // Connect to WebSocket when page loads
+        window.onload = connectWebSocket;
+    </script>
+</body>
+</html> 
