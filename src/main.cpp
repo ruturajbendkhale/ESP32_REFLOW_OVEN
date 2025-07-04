@@ -130,6 +130,22 @@ void updateDisplay() {
     }
     
     display.display();
+
+    // Send real-time data over Serial with current state
+    Serial.print("State:");
+    Serial.print(ReflowController::getStageString(reflowController.getCurrentStage()));
+    Serial.print(",T:");
+    Serial.print(currentTemp, 1);
+    Serial.print(",S:");
+    Serial.print(reflowController.getTargetTemperature(), 1);
+    Serial.print(",P:");
+    Serial.print((Output/255.0)*100, 1);
+    if (alarmState) {
+        Serial.print(",ALARM");
+    } else if (!heatingEnabled) {
+        Serial.print(",DISABLED");
+    }
+    Serial.println();
 }
 
 void handleSerialCommands() {
