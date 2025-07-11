@@ -115,3 +115,9 @@ This project is open source and available under the MIT License.
 - Uses Adafruit libraries for display and sensor interfaces
 - PID library by Brett Beauregard
 - MAX6675 library by Adafruit 
+
+## Feature Requests
+
+1. **External Display Interface**: Implement an external display interface to replace the damaged onboard display.
+2. **Dynamic Wi-Fi Connection**: Create a dynamic Wi-Fi connection system that allows users to connect to any Wi-Fi network instead of using a static SSID and password.
+3. **On-Screen Keyboard**: Develop an on-screen keyboard for users to select Wi-Fi SSID and enter passwords, designed for a 128x64 pixel AMOLED display. 

@@ -4,20 +4,20 @@
 // Preheat Stage Parameters
 #define PREHEAT_RAMP_RATE 2.0        // °C/s - Rate of temperature increase from ambient
 #define SOAK_TARGET_TEMP 150.0       // °C - Temperature at which soak begins
-#define MAX_PREHEAT_TIME 120         // seconds - Maximum time allowed in preheat phase
+#define MAX_PREHEAT_TIME 150         // seconds - Maximum time allowed in preheat phase
 
 // Soak Stage Parameters
 #define SOAK_TEMP 165.0              // °C - Stable temperature for soak
-#define SOAK_DURATION 60             // seconds - Time to hold at soak temperature
+#define SOAK_DURATION 120             // seconds - Time to hold at soak temperature
 
 // Reflow Stage Parameters
 #define REFLOW_RAMP_RATE 2.0         // °C/s - Rate from soak to peak
 #define PEAK_TEMP 245.0              // °C - Maximum temperature for lead-free solder
 #define LIQUIDUS_TEMP 217.0          // °C - Melting point of SAC305 lead-free solder
-#define TIME_ABOVE_LIQUIDUS 60       // seconds - Time above melting point
+#define TIME_ABOVE_LIQUIDUS 120       // seconds - Time above melting point
 
 // Cooling Stage Parameters
-#define COOLING_RATE 3.0             // °C/s - Rate of cooling
+#define COOLING_RATE 2.0             // °C/s - Rate of cooling
 #define SAFE_HANDLING_TEMP 100.0     // °C - Temperature safe for handling
 
 // Profile Timing Parameters
