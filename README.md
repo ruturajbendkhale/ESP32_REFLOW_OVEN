@@ -73,7 +73,10 @@ This project uses PlatformIO for development. To build and flash:
 4. Build and upload to your ESP32
 
 ```bash
-# Using PlatformIO CLI
+First, clean the file system:
+pio run -t erase
+-Then upload the filesystem:
+pio run -t uploadfs
 pio run -t upload
 ```
 
