@@ -10,6 +10,8 @@
 #include <WebSocketsServer.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include <RotaryEncoder.h>
+
 
 #include "PARAMETERS.h"
 #include "PROFILE.h"
@@ -28,6 +30,7 @@ void updateDisplay();
 void handleSerialCommands();
 void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
 void sendWebSocketData();
+int  encoderTargetTemp = 100;
 
 // Initialize display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -37,6 +40,9 @@ MAX6675 thermocouple(thermoCLK, thermoCS, thermoDO);
 
 // Initialize Reflow Controller
 ReflowController reflowController;
+
+// Initialize Reflow ENCODER
+RotaryEncoder encoder(ENCODER_CLK, ENCODER_DT);
 
 // PID Controller configuration
 double Setpoint, Input, Output;
@@ -59,6 +65,19 @@ bool heatingEnabled = true;
 bool alarmState = false;
 
 void setup() {
+        // Set initial encoder position
+    encoder.setPosition(encoderTargetTemp);
+
+    // Initialize I2C for display
+    Wire.begin(I2C_SDA, I2C_SCL);
+    
+    // Initialize display
+    Serial.println("Initializing Display...");
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+        Serial.println(F("SSD1306 allocation failed! Check wiring:"));
+        for(;;);
+    }
+
     // Initialize serial communication
     Serial.begin(SERIAL_BAUD_RATE);
     delay(STARTUP_DELAY);
@@ -137,17 +156,6 @@ void setup() {
     // Initialize WebSocket
     webSocket.begin();
     webSocket.onEvent(handleWebSocket);
-    
-    // Initialize I2C for display
-    Wire.begin(I2C_SDA, I2C_SCL);
-    
-    // Initialize display
-    Serial.println("Initializing Display...");
-    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-        Serial.println(F("SSD1306 allocation failed! Check wiring:"));
-        for(;;);
-    }
-    
     // Initialize components
     reflowController.begin();
     
@@ -172,6 +180,7 @@ void handleWebSocket(uint8_t num, WStype_t type, uint8_t * payload, size_t lengt
         case WStype_CONNECTED:
             Serial.printf("[%u] Connected from url: %s\n", num, payload);
             break;
+            
         case WStype_TEXT:
             const size_t bufferSize = 32;  // Adjust size as needed for expected payloads
             char command[bufferSize];
@@ -347,7 +356,22 @@ void loop() {
             Serial.println("ALARM: Temperature too high! Heater disabled.");
         }
     }
+    encoder.tick(); // must call this in loop()
+
+int newTemp = encoder.getPosition();
+if (newTemp != encoderTargetTemp) {
+    encoderTargetTemp = newTemp;
     
+    // Clamp value within safe limits
+    if (encoderTargetTemp < 30) encoderTargetTemp = 30;
+    if (encoderTargetTemp > 250) encoderTargetTemp = 250;
+
+    // Set PID target temperature
+    Setpoint = encoderTargetTemp;
+    
+    Serial.print("Target Temp set to: ");
+    Serial.println(Setpoint);
+}
     // Update target temperature from reflow controller if running
     if (reflowController.isRunning()) {
         Setpoint = reflowController.getTargetTemperature();

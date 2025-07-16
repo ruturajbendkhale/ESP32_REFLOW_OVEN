@@ -8,9 +8,9 @@
 #define SCREEN_ADDRESS 0x3C
 
 // encoder configuration
-#define ENCODER_CLK D6
+#define ENCODER_CLK D4
 #define ENCODER_DT D3
-#define ENCODER_SW D4
+// #define ENCODER_SW D4
 
 // I2C Pins for NodeMCU ESP8266
 #define I2C_SDA D2  // GPIO4 (D2)
