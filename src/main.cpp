@@ -41,7 +41,7 @@ MAX6675 thermocouple(thermoCLK, thermoCS, thermoDO);
 // Initialize Reflow Controller
 ReflowController reflowController;
 
-// Initialize Reflow ENCODER
+// Initialize ENCODER
 RotaryEncoder encoder(ENCODER_CLK, ENCODER_DT);
 
 // PID Controller configuration
@@ -68,15 +68,23 @@ void setup() {
         // Set initial encoder position
     encoder.setPosition(encoderTargetTemp);
 
-    // Initialize I2C for display
-    Wire.begin(I2C_SDA, I2C_SCL);
-    
-    // Initialize display
+// Initialize I2C for display 
+Wire.begin(I2C_SDA, I2C_SCL);
+
+// Initialize display
     Serial.println("Initializing Display...");
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
         Serial.println(F("SSD1306 allocation failed! Check wiring:"));
         for(;;);
     }
+  display.clearDisplay();
+display.setTextColor(SSD1306_WHITE);
+display.setTextSize(1);
+display.setCursor(0, 0);
+//display.print(encoderTargetTemp);
+//display.print(reflowController.getTargetTemperature(), 1);
+display.display();
+delay(1000);
 
     // Initialize serial communication
     Serial.begin(SERIAL_BAUD_RATE);
@@ -101,9 +109,10 @@ void setup() {
         Serial.print(dir.fileSize());
         Serial.println(" bytes)");
     }
+    /*
     
     // Connect to WiFi
-    WiFi.begin(ssid, password);
+  WiFi.begin(ssid, password);
     Serial.print("Connecting to WiFi");
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
@@ -157,7 +166,7 @@ void setup() {
     webSocket.begin();
     webSocket.onEvent(handleWebSocket);
     // Initialize components
-    reflowController.begin();
+    reflowController.begin(); */
     
     // Initialize PID
     Setpoint = AMBIENT_TEMP;
@@ -212,7 +221,6 @@ void sendWebSocketData() {
     serializeJson(doc, jsonString);
     webSocket.broadcastTXT(jsonString);
 }
-
 void updateDisplay() {
     display.clearDisplay();
     
@@ -222,7 +230,7 @@ void updateDisplay() {
     display.println("Reflow Oven PID");
     
     // Draw a line
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+     display.drawLine(0, 10, 127, 10, SSD1306_WHITE); 
     
     // Current temperature (large font)
     display.setTextSize(2);
@@ -246,6 +254,12 @@ void updateDisplay() {
     display.print("Power: ");
     display.print((Output/255.0)*100, 0);
     display.print("%");
+
+    //  Add encoder value
+    display.setCursor(80, 35);
+    display.print("Enc: ");
+    display.print(encoderTargetTemp);
+    display.print("C");
     
     // Status indicators
     display.setCursor(0, 55);
@@ -320,7 +334,8 @@ void handleSerialCommands() {
     }
 }
 
-void loop() {
+void loop() 
+{
     // Handle web server
     server.handleClient();
     webSocket.loop();
@@ -356,22 +371,6 @@ void loop() {
             Serial.println("ALARM: Temperature too high! Heater disabled.");
         }
     }
-    encoder.tick(); // must call this in loop()
-
-int newTemp = encoder.getPosition();
-if (newTemp != encoderTargetTemp) {
-    encoderTargetTemp = newTemp;
-    
-    // Clamp value within safe limits
-    if (encoderTargetTemp < 30) encoderTargetTemp = 30;
-    if (encoderTargetTemp > 250) encoderTargetTemp = 250;
-
-    // Set PID target temperature
-    Setpoint = encoderTargetTemp;
-    
-    Serial.print("Target Temp set to: ");
-    Serial.println(Setpoint);
-}
     // Update target temperature from reflow controller if running
     if (reflowController.isRunning()) {
         Setpoint = reflowController.getTargetTemperature();
@@ -417,7 +416,22 @@ if (newTemp != encoderTargetTemp) {
         digitalWrite(SCR_CONTROL_PIN, LOW);
         heaterState = false;
     }
+    encoder.tick(); 
+
+int newTemp = encoder.getPosition();
+if (newTemp != encoderTargetTemp) {
+    encoderTargetTemp = newTemp;
     
+    // Clamp value within safe limits
+    if (encoderTargetTemp < 30) encoderTargetTemp = 30;
+    if (encoderTargetTemp > 250) encoderTargetTemp = 250;
+
+    // Set PID target temperature
+    Setpoint = encoderTargetTemp;
+    
+    Serial.print("Target Temp set to: ");
+    Serial.println(Setpoint);
+}
     // Update display and WebSocket
     if (millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         updateDisplay();
@@ -428,3 +442,4 @@ if (newTemp != encoderTargetTemp) {
     // Handle serial commands
     handleSerialCommands();
 }
+
