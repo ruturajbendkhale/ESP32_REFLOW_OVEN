@@ -63,6 +63,7 @@ bool heaterState = false;
 // System state
 bool heatingEnabled = true;
 bool alarmState = false;
+const float hysteresis = 1.0;
 
 void setup() {
         // Set initial encoder position
@@ -244,10 +245,10 @@ void updateDisplay() {
     
     // Target temperature
     display.setTextSize(1);
-    display.setCursor(0, 35);
+    /*display.setCursor(0, 35);
     display.print("Target: ");
     display.print(reflowController.getTargetTemperature(), 1);
-    display.print("C");
+    display.print("C");*/
     
     // PID Output
     display.setCursor(0, 45);
@@ -256,11 +257,24 @@ void updateDisplay() {
     display.print("%");
 
     //  Add encoder value
-    display.setCursor(80, 35);
+    display.setCursor(0, 35);
     display.print("Enc: ");
     display.print(encoderTargetTemp);
     display.print("C");
     
+    // Check if current temperature has reached or exceeded target
+if (currentTemp >= encoderTargetTemp + hysteresis) {
+    // Temperature is above target + buffer, turn off heater
+    digitalWrite(SCR_CONTROL_PIN, LOW);
+    heaterState = false;
+    heatingEnabled = false;
+    Serial.println("Heater OFF: Temperature exceeded target.");
+}
+else if (currentTemp <= encoderTargetTemp - hysteresis) {
+    // Temperature dropped below target - buffer, turn heater ON again
+    heatingEnabled = true;
+    Serial.println("Heater ON: Temperature dropped below target.");
+}
     // Status indicators
     display.setCursor(0, 55);
     if (alarmState) {
